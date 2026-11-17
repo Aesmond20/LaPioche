@@ -207,4 +207,73 @@ final class GameTests: XCTestCase {
             }
         }
     }
+    
+    func testDeleteGameReturnsNoContent() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let id = try XCTUnwrap(game.id)
+
+            try await app.test(.DELETE, "games/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .noContent)
+            })
+
+            try await app.test(.GET, "games/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .notFound)
+            })
+        }
+    }
+
+    func testDeleteGameOnLoanReturnsConflict() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let member = try await createMember(app)
+            let id = try XCTUnwrap(game.id)
+
+            try await insertLoan(
+                app, gameID: id, memberID: try XCTUnwrap(member.id),
+                borrowedAt: Date(), dueAt: Date()
+            )
+
+            try await app.test(.DELETE, "games/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .conflict)
+            })
+        }
+    }
+
+    func testDeleteGameWithReturnedLoanReturnsConflict() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let member = try await createMember(app)
+            let id = try XCTUnwrap(game.id)
+
+            try await insertLoan(
+                app, gameID: id, memberID: try XCTUnwrap(member.id),
+                borrowedAt: Date(), dueAt: Date(), returnedAt: Date()
+            )
+
+            try await app.test(.DELETE, "games/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .conflict)
+            })
+
+            try await app.test(.GET, "games/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .ok)
+            })
+        }
+    }
+
+    func testDeleteUnknownGameReturnsNotFound() async throws {
+        try await withApp { app in
+            try await app.test(.DELETE, "games/\(UUID())", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .notFound)
+            })
+        }
+    }
+
+    func testDeleteGameWithMalformedIDReturnsBadRequest() async throws {
+        try await withApp { app in
+            try await app.test(.DELETE, "games/not-a-uuid", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .badRequest)
+            })
+        }
+    }
 }
