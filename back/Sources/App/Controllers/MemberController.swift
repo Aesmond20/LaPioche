@@ -10,6 +10,7 @@ struct MemberController: RouteCollection {
         members.group(":memberID") { member in
             member.get(use: show)
             member.put(use: update)
+            member.delete(use: delete)
         }
     }
 
@@ -66,6 +67,19 @@ struct MemberController: RouteCollection {
         member.email = dto.email
         try await member.save(on: req.db)
         return member.toDTO()
+    }
+    
+    @Sendable
+    func delete(req: Request) async throws -> HTTPStatus {
+        let member = try await findMember(req)
+        
+        let hasLoans = try await member.$loans.query(on: req.db).count() > 0
+        guard !hasLoans else {
+            throw Abort(.conflict, reason: "A member with loans cannot be deleted")
+        }
+        
+        try await member.delete(on: req.db)
+        return.noContent
     }
     
     private func findMember(_ req: Request) async throws -> Member {

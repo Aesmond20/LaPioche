@@ -148,4 +148,73 @@ final class MemberTests: XCTestCase {
             }
         }
     }
+    
+    func testDeleteMemberReturnsNoContent() async throws {
+        try await withApp { app in
+            let member = try await createMember(app)
+            let id = try XCTUnwrap(member.id)
+
+            try await app.test(.DELETE, "members/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .noContent)
+            })
+
+            try await app.test(.GET, "members/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .notFound)
+            })
+        }
+    }
+
+    func testDeleteMemberWithLoanInProgressReturnsConflict() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let member = try await createMember(app)
+            let id = try XCTUnwrap(member.id)
+
+            try await insertLoan(
+                app, gameID: try XCTUnwrap(game.id), memberID: id,
+                borrowedAt: Date(), dueAt: Date()
+            )
+
+            try await app.test(.DELETE, "members/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .conflict)
+            })
+        }
+    }
+
+    func testDeleteMemberWithReturnedLoanReturnsConflict() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let member = try await createMember(app)
+            let id = try XCTUnwrap(member.id)
+
+            try await insertLoan(
+                app, gameID: try XCTUnwrap(game.id), memberID: id,
+                borrowedAt: Date(), dueAt: Date(), returnedAt: Date()
+            )
+
+            try await app.test(.DELETE, "members/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .conflict)
+            })
+
+            try await app.test(.GET, "members/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .ok)
+            })
+        }
+    }
+
+    func testDeleteUnknownMemberReturnsNotFound() async throws {
+        try await withApp { app in
+            try await app.test(.DELETE, "members/\(UUID())", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .notFound)
+            })
+        }
+    }
+
+    func testDeleteMemberWithMalformedIDReturnsBadRequest() async throws {
+        try await withApp { app in
+            try await app.test(.DELETE, "members/not-a-uuid", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .badRequest)
+            })
+        }
+    }
 }
