@@ -2,6 +2,17 @@
 import XCTVapor
 
 final class GameTests: XCTestCase {
+    private func updateGame(
+        _ app: Application,
+        id: String,
+        with dto: CreateGameDTO,
+        afterResponse: (XCTHTTPResponse) async throws -> Void
+    ) async throws {
+        try await app.test(.PUT, "games/\(id)", beforeRequest: { req in
+            try req.content.encode(dto)
+        }, afterResponse: afterResponse)
+    }
+    
     func testCreateGameReturnsCreated() async throws {
         try await withApp { app in
             try await app.test(.POST, "games", beforeRequest: { req in
@@ -103,6 +114,97 @@ final class GameTests: XCTestCase {
                 XCTAssertEqual(res.status, .badRequest)
                 XCTAssertEqual(res.headers.first(name: .accessControlAllowOrigin), "*")
             })
+        }
+    }
+    
+    func testUpdateGameReturnsUpdatedGame() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let id = try XCTUnwrap(game.id)
+
+            try await updateGame(app, id: "\(id)", with: CreateGameDTO(
+                title: "Catan Junior", minPlayers: 2, maxPlayers: 4, durationMinutes: 30
+            )) { res in
+                XCTAssertEqual(res.status, .ok)
+                let updated = try res.content.decode(GameDTO.self)
+                XCTAssertEqual(updated.id, id)
+                XCTAssertEqual(updated.title, "Catan Junior")
+                XCTAssertEqual(updated.minPlayers, 2)
+                XCTAssertEqual(updated.maxPlayers, 4)
+                XCTAssertEqual(updated.durationMinutes, 30)
+            }
+
+            try await app.test(.GET, "games/\(id)", afterResponse: { res async throws in
+                XCTAssertEqual(try res.content.decode(GameDTO.self).title, "Catan Junior")
+            })
+        }
+    }
+
+    func testUpdateBorrowedGameStaysUnavailable() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let member = try await createMember(app)
+            let id = try XCTUnwrap(game.id)
+            let memberID = try XCTUnwrap(member.id)
+
+            try await app.test(.POST, "loans", beforeRequest: { req in
+                try req.content.encode(CreateLoanDTO(gameID: id, memberID: memberID))
+            }, afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .created)
+            })
+
+            try await updateGame(app, id: "\(id)", with: CreateGameDTO(
+                title: "Catan", minPlayers: 3, maxPlayers: 4, durationMinutes: 120
+            )) { res in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertFalse(try res.content.decode(GameDTO.self).isAvailable)
+            }
+        }
+    }
+
+    func testUpdateGameWithEmptyTitleIsRejected() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let id = try XCTUnwrap(game.id)
+
+            try await updateGame(app, id: "\(id)", with: CreateGameDTO(
+                title: "", minPlayers: 3, maxPlayers: 4, durationMinutes: 90
+            )) { res in
+                XCTAssertEqual(res.status, .badRequest)
+            }
+        }
+    }
+
+    func testUpdateGameWithInvertedPlayerBoundsIsRejected() async throws {
+        try await withApp { app in
+            let game = try await createGame(app)
+            let id = try XCTUnwrap(game.id)
+
+            try await updateGame(app, id: "\(id)", with: CreateGameDTO(
+                title: "Catan", minPlayers: 5, maxPlayers: 2, durationMinutes: 90
+            )) { res in
+                XCTAssertEqual(res.status, .badRequest)
+            }
+        }
+    }
+
+    func testUpdateUnknownGameReturnsNotFound() async throws {
+        try await withApp { app in
+            try await updateGame(app, id: "\(UUID())", with: CreateGameDTO(
+                title: "Catan", minPlayers: 3, maxPlayers: 4, durationMinutes: 90
+            )) { res in
+                XCTAssertEqual(res.status, .notFound)
+            }
+        }
+    }
+
+    func testUpdateGameWithMalformedIDReturnsBadRequest() async throws {
+        try await withApp { app in
+            try await updateGame(app, id: "not-a-uuid", with: CreateGameDTO(
+                title: "Catan", minPlayers: 3, maxPlayers: 4, durationMinutes: 90
+            )) { res in
+                XCTAssertEqual(res.status, .badRequest)
+            }
         }
     }
 }
