@@ -217,4 +217,71 @@ final class MemberTests: XCTestCase {
             })
         }
     }
+    
+    func testListMemberLoansReturnsAllLoansFromOldestToNewest() async throws {
+        try await withApp { app in
+            let firstGame = try await createGame(app, title: "Catan")
+            let secondGame = try await createGame(app, title: "Dixit")
+            let member = try await createMember(app)
+            let other = try await createMember(app, name: "Alex", email: "alex@example.com")
+            let memberID = try XCTUnwrap(member.id)
+            let firstGameID = try XCTUnwrap(firstGame.id)
+            let secondGameID = try XCTUnwrap(secondGame.id)
+
+            try await insertLoan(
+                app, gameID: firstGameID, memberID: memberID,
+                borrowedAt: Date(timeIntervalSinceNow: -30 * 86_400),
+                dueAt: Date(timeIntervalSinceNow: -16 * 86_400),
+                returnedAt: Date(timeIntervalSinceNow: -20 * 86_400)
+            )
+            try await insertLoan(
+                app, gameID: secondGameID, memberID: memberID,
+                borrowedAt: Date(timeIntervalSinceNow: -2 * 86_400),
+                dueAt: Date(timeIntervalSinceNow: 12 * 86_400)
+            )
+            try await insertLoan(
+                app, gameID: firstGameID, memberID: try XCTUnwrap(other.id),
+                borrowedAt: Date(), dueAt: Date(timeIntervalSinceNow: 14 * 86_400)
+            )
+
+            try await app.test(.GET, "members/\(memberID)/loans", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .ok)
+                let loans = try res.content.decode([LoanDTO].self)
+                XCTAssertEqual(loans.count, 2)
+                XCTAssertTrue(loans.allSatisfy { $0.memberID == memberID })
+                XCTAssertEqual(loans.first?.gameID, firstGameID)
+                XCTAssertNotNil(loans.first?.returnedAt)
+                XCTAssertEqual(loans.last?.gameID, secondGameID)
+                XCTAssertNil(loans.last?.returnedAt)
+            })
+        }
+    }
+
+    func testListMemberLoansWithoutLoansReturnsEmptyList() async throws {
+        try await withApp { app in
+            let member = try await createMember(app)
+            let memberID = try XCTUnwrap(member.id)
+
+            try await app.test(.GET, "members/\(memberID)/loans", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .ok)
+                XCTAssertEqual(try res.content.decode([LoanDTO].self).count, 0)
+            })
+        }
+    }
+
+    func testListLoansOfUnknownMemberReturnsNotFound() async throws {
+        try await withApp { app in
+            try await app.test(.GET, "members/\(UUID())/loans", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .notFound)
+            })
+        }
+    }
+
+    func testListLoansWithMalformedMemberIDReturnsBadRequest() async throws {
+        try await withApp { app in
+            try await app.test(.GET, "members/not-a-uuid/loans", afterResponse: { res async throws in
+                XCTAssertEqual(res.status, .badRequest)
+            })
+        }
+    }
 }
