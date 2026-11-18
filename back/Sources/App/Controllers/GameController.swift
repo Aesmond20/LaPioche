@@ -32,6 +32,9 @@ struct GameController: RouteCollection {
         if let text = search.q?.trimmingCharacters(in: .whitespaces), !text.isEmpty {
             games = games.filter { $0.title.localizedCaseInsensitiveContains(text) }
         }
+        if let available = search.available {
+            games = games.filter { $0.isAvailable == available }
+        }
         return games.map { $0.toDTO() }
     }
 

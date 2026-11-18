@@ -373,4 +373,81 @@ final class GameTests: XCTestCase {
             }
         }
     }
+    
+    func testFilterAvailableGamesIncludesReturnedGames() async throws {
+        try await withApp { app in
+            let free = try await createGame(app, title: "Azul")
+            let borrowed = try await createGame(app, title: "Catan")
+            let returned = try await createGame(app, title: "Dixit")
+            let member = try await createMember(app)
+            let memberID = try XCTUnwrap(member.id)
+
+            try await insertLoan(
+                app, gameID: try XCTUnwrap(borrowed.id), memberID: memberID,
+                borrowedAt: Date(), dueAt: Date(timeIntervalSinceNow: 14 * 86_400)
+            )
+            try await insertLoan(
+                app, gameID: try XCTUnwrap(returned.id), memberID: memberID,
+                borrowedAt: Date(timeIntervalSinceNow: -20 * 86_400),
+                dueAt: Date(timeIntervalSinceNow: -6 * 86_400),
+                returnedAt: Date(timeIntervalSinceNow: -7 * 86_400)
+            )
+
+            try await searchGames(app, query: "available=true") { res in
+                XCTAssertEqual(res.status, .ok)
+                let games = try res.content.decode([GameDTO].self)
+                XCTAssertEqual(games.map(\.title).sorted(), ["Azul", "Dixit"])
+                XCTAssertTrue(games.allSatisfy(\.isAvailable))
+                XCTAssertTrue(games.contains { $0.id == free.id })
+            }
+        }
+    }
+
+    func testFilterUnavailableGamesReturnsOnlyBorrowedGames() async throws {
+        try await withApp { app in
+            _ = try await createGame(app, title: "Azul")
+            let borrowed = try await createGame(app, title: "Catan")
+            let member = try await createMember(app)
+
+            try await insertLoan(
+                app, gameID: try XCTUnwrap(borrowed.id), memberID: try XCTUnwrap(member.id),
+                borrowedAt: Date(), dueAt: Date(timeIntervalSinceNow: 14 * 86_400)
+            )
+
+            try await searchGames(app, query: "available=false") { res in
+                XCTAssertEqual(res.status, .ok)
+                let games = try res.content.decode([GameDTO].self)
+                XCTAssertEqual(games.map(\.title), ["Catan"])
+                XCTAssertFalse(try XCTUnwrap(games.first).isAvailable)
+            }
+        }
+    }
+
+    func testFilterAvailableCombinesWithSearchParameters() async throws {
+        try await withApp { app in
+            _ = try await createGame(app, title: "Catan")
+            let borrowed = try await createGame(app, title: "Catan Junior")
+            _ = try await createGame(app, title: "Dixit")
+            let member = try await createMember(app)
+
+            try await insertLoan(
+                app, gameID: try XCTUnwrap(borrowed.id), memberID: try XCTUnwrap(member.id),
+                borrowedAt: Date(), dueAt: Date(timeIntervalSinceNow: 14 * 86_400)
+            )
+
+            try await searchGames(app, query: "q=catan&available=true") { res in
+                XCTAssertEqual(res.status, .ok)
+                let games = try res.content.decode([GameDTO].self)
+                XCTAssertEqual(games.map(\.title), ["Catan"])
+            }
+        }
+    }
+
+    func testFilterAvailableWithInvalidValueIsRejected() async throws {
+        try await withApp { app in
+            try await searchGames(app, query: "available=maybe") { res in
+                XCTAssertEqual(res.status, .badRequest)
+            }
+        }
+    }
 }
