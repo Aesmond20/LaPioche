@@ -6,6 +6,7 @@ const dixit = { id: "g2", title: "Dixit", minPlayers: 3, maxPlayers: 6, duration
 const camille = { id: "m1", name: "Camille", email: "camille@example.com" };
 
 const cardOf = (app, title) => app.$$("#games-list .card").find((card) => card.querySelector("h3").textContent === title);
+const rowOf = (app, name) => app.$$("#members-list .row").find((row) => row.querySelector("strong").textContent === name);
 
 // --- Jeux
 
@@ -192,4 +193,95 @@ test("an email already in use is shown in French", async () => {
   app.$("#member-form").requestSubmit();
   await waitFor(() => !app.$("#member-dialog .form-error").hidden, "le message d'erreur");
   assertIncludes(app.$("#member-dialog .form-error").textContent, "utilise déjà cette adresse e-mail");
+});
+
+test("editing a member opens a prefilled form, sends a PUT and refreshes the list", async () => {
+  let members = [camille];
+  const app = await mountApp(
+    {
+      "GET /members": () => members,
+      "PUT /members/m1": ({ body }) => {
+        members = [{ ...camille, ...body }];
+        return [200, members[0]];
+      },
+    },
+    { hash: "#members" },
+  );
+  await waitFor(() => app.$$("#members-list .row").length === 1);
+  app.click("Modifier", rowOf(app, "Camille"));
+  await waitFor(() => app.$("#member-dialog").open, "le formulaire de modification");
+
+  const form = app.$("#member-form");
+  assertEqual(form.elements.name.value, "Camille");
+  assertEqual(form.elements.email.value, "camille@example.com");
+
+  form.elements.name.value = "Camille Martin";
+  form.requestSubmit();
+  await waitFor(() => app.calls.some((call) => call.method === "PUT"), "l'appel PUT");
+  const put = app.calls.find((call) => call.method === "PUT");
+  assertEqual(put.path, "/members/m1");
+  assertEqual(put.body, { name: "Camille Martin", email: "camille@example.com" });
+  await waitFor(() => rowOf(app, "Camille Martin"), "la liste affiche le nouveau nom");
+  assertTrue(!app.$("#member-dialog").open, "la boîte devrait se fermer");
+});
+
+test("editing a member with an email used by someone else shows a French error in the form", async () => {
+  const app = await mountApp(
+    {
+      "GET /members": [camille],
+      "PUT /members/m1": [409, { error: true, reason: "A member with this email already exists" }],
+    },
+    { hash: "#members" },
+  );
+  await waitFor(() => app.$$("#members-list .row").length === 1);
+  app.click("Modifier", rowOf(app, "Camille"));
+  await waitFor(() => app.$("#member-dialog").open, "le formulaire de modification");
+  app.$("#member-form").elements.email.value = "alex@example.com";
+  app.$("#member-form").requestSubmit();
+  await waitFor(() => !app.$("#member-dialog .form-error").hidden, "le message d'erreur");
+  assertEqual(app.$("#member-dialog .form-error").textContent, "Un·e autre adhérent·e utilise déjà cette adresse e-mail.");
+  assertTrue(app.$("#member-dialog").open, "le formulaire devrait rester ouvert");
+  assertEqual(app.$("#member-form").elements.email.value, "alex@example.com");
+});
+
+test("deleting a member asks for confirmation then removes them from the list", async () => {
+  const alex = { id: "m2", name: "Alex", email: "alex@example.com" };
+  let members = [camille, alex];
+  const app = await mountApp(
+    {
+      "GET /members": () => members,
+      "DELETE /members/m1": () => {
+        members = [alex];
+        return [204];
+      },
+    },
+    { hash: "#members" },
+  );
+  await waitFor(() => app.$$("#members-list .row").length === 2);
+  app.click("Supprimer", rowOf(app, "Camille"));
+  await waitFor(() => app.$("#confirm-dialog").open, "la demande de confirmation");
+  assertIncludes(app.$("#confirm-message").textContent, "Camille");
+  assertTrue(!app.calls.some((call) => call.method === "DELETE"), "rien ne doit être supprimé avant la confirmation");
+
+  app.$("#confirm-form").requestSubmit();
+  await waitFor(() => app.$$("#members-list .row").length === 1, "la personne disparaît de la liste");
+  assertEqual(app.calls.find((call) => call.method === "DELETE").path, "/members/m1");
+  assertTrue(!rowOf(app, "Camille"), "Camille ne devrait plus être affiché·e");
+});
+
+test("a refused member deletion is shown in French and the confirmation stays open", async () => {
+  const app = await mountApp(
+    {
+      "GET /members": [camille],
+      "DELETE /members/m1": [409, { error: true, reason: "A member with loans cannot be deleted" }],
+    },
+    { hash: "#members" },
+  );
+  await waitFor(() => app.$$("#members-list .row").length === 1);
+  app.click("Supprimer", rowOf(app, "Camille"));
+  await waitFor(() => app.$("#confirm-dialog").open, "la demande de confirmation");
+  app.$("#confirm-form").requestSubmit();
+  await waitFor(() => !app.$("#confirm-dialog .form-error").hidden, "le message d'erreur");
+  assertIncludes(app.$("#confirm-dialog .form-error").textContent, "historique d'emprunts");
+  assertTrue(app.$("#confirm-dialog").open, "la confirmation devrait rester ouverte");
 });
