@@ -38,7 +38,7 @@
 
   <dialog id="game-dialog">
     <form method="dialog" id="game-form" novalidate>
-      <h2>Ajouter un jeu</h2>
+      <h2 id="game-dialog-title">Ajouter un jeu</h2>
       <label>Titre <input name="title" required></label>
       <div class="pair">
         <label>Joueur·ses min <input type="number" name="minPlayers" min="1" step="1" required></label>
@@ -77,6 +77,18 @@
       <div class="actions">
         <button type="button" data-cancel>Annuler</button>
         <button type="submit" class="primary">Emprunter</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog">
+    <form method="dialog" id="confirm-form">
+      <h2>Confirmer la suppression</h2>
+      <p id="confirm-message"></p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" data-cancel>Annuler</button>
+        <button type="submit" class="danger">Supprimer</button>
       </div>
     </form>
   </dialog>
