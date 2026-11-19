@@ -164,6 +164,23 @@ test("a search without result shows its own message, not the empty library one",
   assertEqual(app.$$("#games-list .card").length, 0);
 });
 
+test("the available-only switch sends available=true and combines with the search", async () => {
+  const app = await mountApp({ "GET /games": [catan, dixit], "GET /games?available=true": [catan] });
+  await waitFor(() => app.$$("#games-list .card").length === 2);
+  const form = app.$("#games-filters");
+
+  form.elements.available.click();
+  await waitFor(() => lastGamesSearch(app) === "?available=true", "le paramètre available est envoyé");
+  await waitFor(() => app.$$("#games-list .card").length === 1, "seuls les jeux disponibles restent affichés");
+  assertTrue(Boolean(cardOf(app, "Catan")), "Catan, disponible, doit rester affiché");
+
+  app.type(form.elements.q, "cat");
+  await waitFor(() => lastGamesSearch(app) === "?q=cat&available=true", "la case se combine avec la recherche");
+
+  form.elements.available.click();
+  await waitFor(() => lastGamesSearch(app) === "?q=cat", "décocher la case retire le filtre");
+});
+
 // --- Emprunts
 
 test("borrowing a game sends the game and the chosen member", async () => {

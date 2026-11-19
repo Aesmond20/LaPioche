@@ -122,6 +122,7 @@ function currentFilters() {
     q: data.get("q").trim() || undefined,
     players: positiveInteger(data.get("players")),
     maxDuration: positiveInteger(data.get("maxDuration")),
+    available: data.get("available") ? true : undefined,
   };
 }
 
