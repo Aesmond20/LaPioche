@@ -48,7 +48,6 @@ func createMember(
     return try XCTUnwrap(member)
 }
 
-// The API cannot create a loan that is already late, so tests insert it directly.
 func insertLoan(
     _ app: Application,
     gameID: UUID,
@@ -60,4 +59,18 @@ func insertLoan(
     let loan = Loan(gameID: gameID, memberID: memberID, borrowedAt: borrowedAt, dueAt: dueAt)
     loan.returnedAt = returnedAt
     try await loan.save(on: app.db)
+}
+
+func registerUser(
+    _ app: Application,
+    email: String = "staff@example.com",
+    password: String = "correct-horse"
+) async throws -> AuthResponseDTO {
+    var auth: AuthResponseDTO?
+    try await app.test(.POST, "auth/register", beforeRequest: { req in
+        try req.content.encode(CredentialsDTO(email: email, password: password))
+    }, afterResponse: { res async throws in
+        auth = try res.content.decode(AuthResponseDTO.self)
+    })
+    return try XCTUnwrap(auth)
 }
