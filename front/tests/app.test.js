@@ -376,3 +376,40 @@ test("a member without loans sees a clear message", async () => {
   assertIncludes(app.$("#loans-empty").textContent, "Aucun emprunt");
   assertEqual(app.$$("#loans-list .row").length, 0);
 });
+
+// --- Retards
+
+test("an overdue loan is counted in the navigation and detailed in its own view", async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const app = await mountApp({
+    "GET /games": [catan, dixit],
+    "GET /members": [camille],
+    "GET /loans/overdue": [
+      { id: "l1", gameID: "g2", memberID: "m1", borrowedAt: new Date(Date.now() - 20 * day).toISOString(), dueAt: new Date(Date.now() - 6 * day).toISOString() },
+    ],
+  });
+  await waitFor(() => !app.$("#overdue-count").hidden, "le compteur des retards");
+  assertEqual(app.$("#overdue-count").textContent, "1");
+  assertTrue(!app.$("#games").hidden, "le compteur est visible depuis l'onglet Jeux");
+
+  app.win.location.hash = "#overdue";
+  await waitFor(() => app.$$("#overdue-list .row").length === 1, "la vue des retards");
+  const row = app.$("#overdue-list .row");
+  assertIncludes(row.textContent, "Dixit");
+  assertIncludes(row.textContent, "Camille");
+  assertIncludes(row.textContent, "Retour prévu le");
+  assertIncludes(row.textContent, "6 jours de retard");
+  assertIncludes(row.textContent, "En retard");
+  assertTrue(app.$("#overdue-empty").hidden, "le message de liste vide doit être caché");
+});
+
+test("with no overdue loan, a message says so and no count is shown", async () => {
+  const app = await mountApp(
+    { "GET /games": [catan], "GET /members": [camille], "GET /loans/overdue": [] },
+    { hash: "#overdue" },
+  );
+  await waitFor(() => !app.$("#overdue-empty").hidden, "le message sans retard");
+  assertIncludes(app.$("#overdue-empty").textContent, "Aucun emprunt en retard");
+  assertEqual(app.$$("#overdue-list .row").length, 0);
+  assertTrue(app.$("#overdue-count").hidden, "le compteur doit être caché");
+});

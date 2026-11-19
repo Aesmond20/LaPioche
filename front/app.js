@@ -87,7 +87,8 @@ bindSubmit(confirmDialog, confirmForm, () => confirmAction());
 
 // --- Onglets ---------------------------------------------------------------
 
-const tabs = ["games", "members"];
+const tabs = ["games", "members", "overdue"];
+const loaders = { games: loadGames, members: loadMembers, overdue: loadOverdue };
 
 function currentTab() {
   const name = location.hash.slice(1);
@@ -100,7 +101,8 @@ async function refresh() {
     $(`#${name}`).hidden = name !== tab;
     $(`[data-tab="${name}"]`).toggleAttribute("aria-current", name === tab);
   }
-  await run(tab === "games" ? loadGames : loadMembers);
+  await run(loaders[tab]);
+  await updateOverdueCount();
 }
 
 window.addEventListener("hashchange", refresh);
@@ -331,6 +333,49 @@ function confirmDeleteMember(member) {
     await api.deleteMember(member.id);
     toast(`« ${member.name} » a été supprimé·e.`);
   });
+}
+
+// --- Retards ---------------------------------------------------------------
+
+const dayInMs = 24 * 60 * 60 * 1000;
+
+function daysLate(loan) {
+  return Math.max(1, Math.floor((Date.now() - new Date(loan.dueAt)) / dayInMs));
+}
+
+function overdueRow(loan, titles, names) {
+  const days = daysLate(loan);
+  return el(
+    "li",
+    { class: "row late" },
+    el(
+      "div",
+      { class: "row-main" },
+      el("p", {}, el("strong", {}, titles.get(loan.gameID) ?? "Jeu inconnu"), ` · ${names.get(loan.memberID) ?? "Adhérent·e inconnu·e"}`),
+      el("p", { class: "meta" }, `Retour prévu le ${formatDate(loan.dueAt)} · ${days} jour${days > 1 ? "s" : ""} de retard`),
+    ),
+    el("span", { class: "badge late" }, "En retard"),
+  );
+}
+
+async function loadOverdue() {
+  const [loans, games, members] = await Promise.all([api.listOverdueLoans(), api.listGames(), api.listMembers()]);
+  const titles = new Map(games.map((game) => [game.id, game.title]));
+  const names = new Map(members.map((member) => [member.id, member.name]));
+  $("#overdue-empty").hidden = loans.length > 0;
+  $("#overdue-list").replaceChildren(...loans.map((loan) => overdueRow(loan, titles, names)));
+}
+
+async function updateOverdueCount() {
+  const counter = $("#overdue-count");
+  try {
+    const loans = await api.listOverdueLoans();
+    counter.textContent = loans.length;
+    counter.setAttribute("aria-label", `${loans.length} emprunt${loans.length > 1 ? "s" : ""} en retard`);
+    counter.hidden = loans.length === 0;
+  } catch {
+    counter.hidden = true;
+  }
 }
 
 refresh();
