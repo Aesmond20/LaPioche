@@ -123,7 +123,10 @@ function gameCard(game) {
   const actions = el("div", { class: "actions" });
   if (game.isAvailable) {
     actions.append(button("Emprunter", () => openBorrowDialog(game), "primary"));
+  } else {
+    actions.append(button("Rendre", () => returnGame(game), "primary"));
   }
+
   actions.append(
     button("Modifier", () => openGameDialog(game)),
     button("Supprimer", () => confirmDeleteGame(game), "danger"),
@@ -204,6 +207,32 @@ bindSubmit(borrowDialog, borrowForm, async (data) => {
   const loan = await api.borrow(borrowedGame.id, data.get("memberID"));
   toast(`« ${borrowedGame.title} » emprunté, à rendre avant le ${formatDate(loan.dueAt)}.`);
 });
+
+async function findOpenLoan(gameID) {
+  const members = await api.listMembers();
+  for (const member of members) {
+    const loans = await api.listMemberLoans(member.id);
+    const openLoan = loans.find((loan) => loan.gameID === gameID && !loan.returnedAt);
+    if (openLoan) {
+      return openLoan;
+    }
+  }
+  return null;
+}
+
+async function returnGame(game) {
+  await run(async () => {
+    const loan = await findOpenLoan(game.id);
+    if (!loan) {
+      toast(`Aucun emprunt en cours n'a été trouvé pour « ${game.title} ».`, true);
+      await refresh();
+      return;
+    }
+    await api.returnLoan(loan.id);
+    toast(`« ${game.title} » a bien été rendu.`);
+    await refresh();
+  });
+}
 
 // --- Adhérent·es -----------------------------------------------------------
 

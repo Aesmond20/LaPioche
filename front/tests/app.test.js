@@ -156,6 +156,48 @@ test("borrowing without any member explains that one must be added first", async
   assertTrue(!app.$("#borrow-dialog").open, "la boîte d'emprunt ne doit pas s'ouvrir");
 });
 
+test("returning a borrowed game finds its current loan, calls the return route and updates the screen", async () => {
+  const alex = { id: "m2", name: "Alex", email: "alex@example.com" };
+  let games = [dixit];
+  const app = await mountApp({
+    "GET /games": () => games,
+    "GET /members": [alex, camille],
+    "GET /members/m2/loans": [],
+    "GET /members/m1/loans": [
+      { id: "l0", gameID: "g2", memberID: "m1", borrowedAt: "2026-09-01T10:00:00Z", dueAt: "2026-09-15T10:00:00Z", returnedAt: "2026-09-10T10:00:00Z" },
+      { id: "l1", gameID: "g2", memberID: "m1", borrowedAt: "2026-11-10T10:00:00Z", dueAt: "2026-11-24T10:00:00Z" },
+    ],
+    "POST /loans/l1/return": () => {
+      games = [{ ...dixit, isAvailable: true }];
+      return [200, { id: "l1", gameID: "g2", memberID: "m1", returnedAt: new Date().toISOString() }];
+    },
+  });
+  await waitFor(() => app.$$("#games-list .card").length === 1);
+  assertIncludes(cardOf(app, "Dixit").textContent, "Rendre");
+
+  app.click("Rendre", cardOf(app, "Dixit"));
+  await waitFor(() => app.calls.some((call) => call.method === "POST" && call.path.endsWith("/return")), "l'appel de retour");
+  assertEqual(app.calls.find((call) => call.path.endsWith("/return")).path, "/loans/l1/return");
+
+  await waitFor(() => cardOf(app, "Dixit").textContent.includes("Disponible"), "le jeu redevient disponible à l'écran");
+  const labels = [...cardOf(app, "Dixit").querySelectorAll("button")].map((button) => button.textContent);
+  assertTrue(labels.includes("Emprunter") && !labels.includes("Rendre"), "le jeu rendu doit proposer Emprunter et non Rendre");
+  await waitFor(() => app.$("#toasts").textContent.includes("a bien été rendu"), "le message de confirmation");
+});
+
+test("a failed return is shown in French", async () => {
+  const app = await mountApp({
+    "GET /games": [dixit],
+    "GET /members": [camille],
+    "GET /members/m1/loans": [{ id: "l1", gameID: "g2", memberID: "m1", borrowedAt: "2026-11-10T10:00:00Z", dueAt: "2026-11-24T10:00:00Z" }],
+    "POST /loans/l1/return": [409, { error: true, reason: "Loan is already returned" }],
+  });
+  await waitFor(() => app.$$("#games-list .card").length === 1);
+  app.click("Rendre", cardOf(app, "Dixit"));
+  await waitFor(() => app.$("#toasts .error"), "le message d'erreur");
+  assertEqual(app.$("#toasts .error").textContent, "Cet emprunt a déjà été rendu.");
+});
+
 // --- Adhérent·es
 
 test("members tab lists the members", async () => {

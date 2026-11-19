@@ -77,6 +77,19 @@ test("borrow sends the game and the member", async () => {
   assertEqual(calls[0].body, { gameID: "g1", memberID: "m1" });
 });
 
+test("listMemberLoans calls GET on the member's loans", async () => {
+  const { fetch, calls } = fakeApi({ "GET /members/m1/loans": [] });
+  await withFakeFetch(fetch, () => api.listMemberLoans("m1"));
+  assertEqual(`${calls[0].method} ${calls[0].path}`, "GET /members/m1/loans");
+});
+
+test("returnLoan posts to the loan's return route", async () => {
+  const { fetch, calls } = fakeApi({ "POST /loans/l1/return": { id: "l1" } });
+  await withFakeFetch(fetch, () => api.returnLoan("l1"));
+  assertEqual(`${calls[0].method} ${calls[0].path}`, "POST /loans/l1/return");
+  assertEqual(calls[0].body, undefined);
+});
+
 // --- erreurs
 
 // Attend qu'une promesse échoue et renvoie l'erreur (échoue si elle réussit).
