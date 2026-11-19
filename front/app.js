@@ -1,5 +1,5 @@
 import { API_URL } from "./config.js";
-import { api } from "./api.js";
+import { api, clearToken, hasToken, saveToken, setUnauthorizedHandler } from "./api.js";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 
@@ -36,7 +36,9 @@ async function run(action) {
   try {
     await action();
   } catch (error) {
-    toast(error.message, true);
+    if (error.status !== 401) {
+      toast(error.message, true);
+    }
   }
 }
 
@@ -105,7 +107,11 @@ async function refresh() {
   await updateOverdueCount();
 }
 
-window.addEventListener("hashchange", refresh);
+window.addEventListener("hashchange", () => {
+  if (hasToken()) {
+    refresh();
+  }
+});
 
 // --- Jeux ------------------------------------------------------------------
 
@@ -405,4 +411,82 @@ async function updateOverdueCount() {
   }
 }
 
-refresh();
+// --- Session ---------------------------------------------------------------
+
+const authSection = $("#auth");
+const authForm = $("#auth-form");
+let authMode = "login";
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const isLogin = mode === "login";
+  $("#auth-title").textContent = isLogin ? "Connexion" : "Créer un compte";
+  $("#auth-submit").textContent = isLogin ? "Se connecter" : "Créer le compte";
+  $("#auth-switch").textContent = isLogin ? "Pas encore de compte ? Créer un compte" : "Déjà un compte ? Se connecter";
+  authForm.elements.password.autocomplete = isLogin ? "current-password" : "new-password";
+  showFormError(authSection, null);
+}
+
+function showAuth(notice = "") {
+  for (const dialog of document.querySelectorAll("dialog[open]")) {
+    dialog.close();
+  }
+  $("#app").hidden = true;
+  $("#tabs-nav").hidden = true;
+  $("#session").hidden = true;
+  authSection.hidden = false;
+  setAuthMode("login");
+  $("#auth-notice").textContent = notice;
+  $("#auth-notice").hidden = !notice;
+}
+
+async function showApp(user) {
+  authSection.hidden = true;
+  $("#app").hidden = false;
+  $("#tabs-nav").hidden = false;
+  $("#session").hidden = false;
+  $("#session-email").textContent = user.email;
+  await refresh();
+}
+
+$("#auth-switch").addEventListener("click", () => setAuthMode(authMode === "login" ? "register" : "login"));
+
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  showFormError(authSection, null);
+  const data = new FormData(authForm);
+  const credentials = { email: data.get("email").trim(), password: data.get("password") };
+  try {
+    const auth = authMode === "login" ? await api.login(credentials) : await api.register(credentials);
+    saveToken(auth.token);
+    authForm.reset();
+    await showApp(auth.user);
+  } catch (error) {
+    showFormError(authSection, error);
+  }
+});
+
+$("#logout").addEventListener("click", () => {
+  clearToken();
+  showAuth("Vous êtes déconnecté·e.");
+});
+
+setUnauthorizedHandler(() => showAuth("Votre session a expiré ou n'est plus valide : reconnectez-vous pour continuer."));
+
+// Au démarrage : avec un jeton, on vérifie qu'il est encore valide et on
+// récupère l'adresse e-mail de la personne connectée.
+async function start() {
+  if (!hasToken()) {
+    showAuth();
+    return;
+  }
+  try {
+    await showApp(await api.me());
+  } catch (error) {
+    if (error.status !== 401) {
+      showAuth(error.message);
+    }
+  }
+}
+
+start();

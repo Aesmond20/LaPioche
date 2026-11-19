@@ -9,15 +9,31 @@
 <body>
   <header class="topbar">
     <h1>La Pioche</h1>
-    <nav aria-label="Sections">
+    <nav id="tabs-nav" aria-label="Sections" hidden>
       <a href="#games" data-tab="games">Jeux</a>
       <a href="#members" data-tab="members">Adhérent·es</a>
       <a href="#overdue" data-tab="overdue">En retard <span id="overdue-count" class="count" hidden></span></a>
     </nav>
     <a class="docs-link" id="docs-link" href="http://localhost:8081/">Documentation API</a>
+    <div id="session" class="session" hidden>
+      <span id="session-email"></span>
+      <button type="button" id="logout">Se déconnecter</button>
+    </div>
   </header>
 
-  <main>
+  <section id="auth" hidden>
+    <form id="auth-form" class="auth-form" novalidate>
+      <h2 id="auth-title">Connexion</h2>
+      <p id="auth-notice" class="hint" role="status" hidden></p>
+      <label>Adresse e-mail <input type="email" name="email" autocomplete="username" required></label>
+      <label>Mot de passe <input type="password" name="password" autocomplete="current-password" required></label>
+      <p class="form-error" role="alert" hidden></p>
+      <button type="submit" id="auth-submit" class="primary">Se connecter</button>
+      <button type="button" id="auth-switch">Pas encore de compte ? Créer un compte</button>
+    </form>
+  </section>
+
+  <main id="app" hidden>
     <section id="games" class="tab" hidden>
       <div class="section-head">
         <h2>Jeux</h2>

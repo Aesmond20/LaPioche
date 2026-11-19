@@ -1,5 +1,6 @@
 import { assertEqual, assertIncludes, assertTrue, test, waitFor } from "./runner.js";
 import { mountApp } from "./helpers.js";
+import { TOKEN_KEY } from "../api.js";
 
 const catan = { id: "g1", title: "Catan", minPlayers: 3, maxPlayers: 4, durationMinutes: 90, isAvailable: true };
 const dixit = { id: "g2", title: "Dixit", minPlayers: 3, maxPlayers: 6, durationMinutes: 30, isAvailable: false };
@@ -462,4 +463,81 @@ test("with no overdue loan, a message says so and no count is shown", async () =
   assertIncludes(app.$("#overdue-empty").textContent, "Aucun emprunt en retard");
   assertEqual(app.$$("#overdue-list .row").length, 0);
   assertTrue(app.$("#overdue-count").hidden, "le compteur doit être caché");
+});
+
+// --- Session
+
+test("without a session the login screen replaces the library and can switch to sign-up", async () => {
+  const app = await mountApp({}, { token: null });
+  await waitFor(() => !app.$("#auth").hidden, "l'écran de connexion");
+  assertTrue(app.$("#app").hidden, "la ludothèque doit être cachée");
+  assertTrue(app.$("#tabs-nav").hidden, "les onglets doivent être cachés");
+  assertEqual(app.$("#auth-title").textContent, "Connexion");
+
+  app.click("Pas encore de compte ? Créer un compte");
+  assertEqual(app.$("#auth-title").textContent, "Créer un compte");
+  app.click("Déjà un compte ? Se connecter");
+  assertEqual(app.$("#auth-title").textContent, "Connexion");
+});
+
+test("logging in stores the token, sends it with the next calls and shows the email", async () => {
+  const app = await mountApp(
+    {
+      "POST /auth/login": { token: "abc", expiresAt: "2026-11-20T10:00:00Z", user: { id: "u1", email: "staff@example.com" } },
+      "GET /games": [catan],
+    },
+    { token: null },
+  );
+  await waitFor(() => !app.$("#auth").hidden, "l'écran de connexion");
+  const form = app.$("#auth-form");
+  form.elements.email.value = "staff@example.com";
+  form.elements.password.value = "correct-horse";
+  form.requestSubmit();
+
+  await waitFor(() => app.$$("#games-list .card").length === 1, "la ludothèque s'affiche");
+  assertEqual(app.calls.find((call) => call.path === "/auth/login").body, { email: "staff@example.com", password: "correct-horse" });
+  assertEqual(sessionStorage.getItem(TOKEN_KEY), "abc");
+  assertEqual(app.calls.filter((call) => call.path === "/games").at(-1).headers.Authorization, "Bearer abc");
+  assertEqual(app.$("#session-email").textContent, "staff@example.com");
+  assertTrue(app.$("#auth").hidden, "l'écran de connexion doit être caché");
+});
+
+test("a login failure is shown in French and the form is not cleared", async () => {
+  const app = await mountApp(
+    { "POST /auth/login": [401, { error: true, reason: "Invalid email or password" }] },
+    { token: null },
+  );
+  await waitFor(() => !app.$("#auth").hidden, "l'écran de connexion");
+  const form = app.$("#auth-form");
+  form.elements.email.value = "staff@example.com";
+  form.elements.password.value = "mauvais-mdp";
+  form.requestSubmit();
+
+  await waitFor(() => !app.$("#auth .form-error").hidden, "le message d'erreur");
+  assertEqual(app.$("#auth .form-error").textContent, "Adresse e-mail ou mot de passe incorrect.");
+  assertEqual(form.elements.email.value, "staff@example.com");
+  assertTrue(app.$("#app").hidden, "la ludothèque doit rester cachée");
+});
+
+test("a 401 on a protected route brings back the login screen with an explanation", async () => {
+  const app = await mountApp(
+    { "GET /games": [401, { error: true, reason: "Authentication required" }] },
+    { token: "expired-token" },
+  );
+  await waitFor(() => !app.$("#auth").hidden, "le retour à l'écran de connexion");
+  assertIncludes(app.$("#auth-notice").textContent, "session a expiré");
+  assertTrue(app.$("#app").hidden, "la ludothèque doit être cachée");
+  assertEqual(sessionStorage.getItem(TOKEN_KEY), null);
+});
+
+test("logging out forgets the token and shows the login screen", async () => {
+  const app = await mountApp({ "GET /games": [catan] });
+  await waitFor(() => app.$$("#games-list .card").length === 1);
+  assertEqual(app.$("#session-email").textContent, "staff@example.com");
+
+  app.click("Se déconnecter");
+  await waitFor(() => !app.$("#auth").hidden, "l'écran de connexion");
+  assertEqual(sessionStorage.getItem(TOKEN_KEY), null);
+  assertTrue(app.$("#app").hidden, "la ludothèque doit être cachée");
+  assertIncludes(app.$("#auth-notice").textContent, "déconnecté");
 });

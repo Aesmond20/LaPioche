@@ -1,6 +1,7 @@
 // Outils pour tester le front sans serveur : une fausse API remplace `fetch`.
 import { API_URL } from "../config.js";
 import { waitFor } from "./runner.js";
+import { TOKEN_KEY } from "../api.js";
 
 // Construit une réponse HTTP. `body` est converti en JSON (undefined : pas de corps).
 export function jsonResponse(status, body) {
@@ -22,7 +23,7 @@ export function fakeApi(routes) {
     const url = new URL(input);
     const method = init.method ?? "GET";
     const body = init.body ? JSON.parse(init.body) : undefined;
-    const call = { method, path: url.pathname, search: url.search, body };
+        const call = { method, path: url.pathname, search: url.search, body, headers: init.headers ?? {} };
     calls.push(call);
 
     let handler = routes[`${method} ${url.pathname}${url.search}`] ?? routes[`${method} ${url.pathname}`];
@@ -53,8 +54,13 @@ export async function withFakeFetch(fetchStub, action) {
 
 // Charge la vraie page index.html dans un iframe, branchée sur une fausse API.
 // Renvoie { win, doc, $, calls, click, type }.
-export async function mountApp(routes, { hash = "" } = {}) {
-  const api = fakeApi(routes);
+export async function mountApp(routes, { hash = "", token = "test-token" } = {}) {
+  if (token) {
+    sessionStorage.setItem(TOKEN_KEY, token);
+  } else {
+    sessionStorage.removeItem(TOKEN_KEY);
+  }
+  const api = fakeApi({ "GET /auth/me": { id: "u1", email: "staff@example.com" }, ...routes });
   const pageURL = new URL("../index.html", import.meta.url);
   const html = await (await fetch(pageURL)).text();
 

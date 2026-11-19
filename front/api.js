@@ -10,6 +10,26 @@ export class ApiError extends Error {
   }
 }
 
+export const TOKEN_KEY = "lapioche.token";
+
+export function saveToken(token) {
+  sessionStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
+export function hasToken() {
+  return sessionStorage.getItem(TOKEN_KEY) !== null;
+}
+
+let onUnauthorized = () => {};
+
+export function setUnauthorizedHandler(handler) {
+  onUnauthorized = handler;
+}
+
 // L'API répond avec des messages techniques en anglais : on les traduit ici
 // pour que l'interface n'affiche que des phrases claires en français.
 const fieldLabels = {
@@ -22,6 +42,7 @@ const fieldLabels = {
   players: "Le nombre de joueur·ses",
   maxDuration: "La durée maximale",
   available: "Le filtre de disponibilité",
+  password: "Le mot de passe",
 };
 
 const knownMessages = {
@@ -39,6 +60,9 @@ const knownMessages = {
   "A member with loans cannot be deleted":
     "Suppression impossible : cet·te adhérent·e a un historique d'emprunts, conservé même quand tout est rendu.",
   "A member with this email already exists": "Un·e autre adhérent·e utilise déjà cette adresse e-mail.",
+  "Invalid email or password": "Adresse e-mail ou mot de passe incorrect.",
+  "An account with this email already exists": "Un compte existe déjà avec cette adresse e-mail.",
+  "Authentication required": "Votre session a expiré ou n'est plus valide : reconnectez-vous.",
 };
 
 // Les erreurs de validation de Vapor arrivent regroupées :
@@ -48,6 +72,9 @@ function translateValidation(part) {
   let match;
   if ((match = part.match(/^(\w+) is (?:empty|required)$/))) {
     return `${label(match[1])} est obligatoire.`;
+  }
+  if ((match = part.match(/^(\w+) is less than minimum of (\d+) character/))) {
+    return `${label(match[1])} doit contenir au moins ${match[2]} caractères.`;
   }
   if ((match = part.match(/^(\w+) is less than minimum of (\d+)/))) {
     return `${label(match[1])} doit être d'au moins ${match[2]}.`;
@@ -85,11 +112,20 @@ export function translateError(status, reason) {
 }
 
 async function request(method, path, body) {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  const headers = {};
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
       method,
-      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
@@ -100,7 +136,10 @@ async function request(method, path, body) {
   }
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    // Vapor renvoie { error: true, reason: "..." }
+    if (response.status === 401 && token) {
+      clearToken();
+      onUnauthorized();
+    }
     throw new ApiError(response.status, translateError(response.status, data?.reason));
   }
   return data;
@@ -118,6 +157,9 @@ function queryString(params) {
 }
 
 export const api = {
+  register: (credentials) => request("POST", "/auth/register", credentials),
+  login: (credentials) => request("POST", "/auth/login", credentials),
+  me: () => request("GET", "/auth/me"),
   listGames: (filters = {}) => request("GET", `/games${queryString(filters)}`),
   createGame: (game) => request("POST", "/games", game),
   updateGame: (id, game) => request("PUT", `/games/${encodeURIComponent(id)}`, game),

@@ -1,4 +1,4 @@
-import { api, ApiError, translateError } from "../api.js";
+import { api, ApiError, clearToken, hasToken, saveToken, translateError } from "../api.js";
 import { assertEqual, assertIncludes, assertTrue, test } from "./runner.js";
 import { fakeApi, withFakeFetch } from "./helpers.js";
 
@@ -130,4 +130,45 @@ test("a game already on loan (409) gives a French message", async () => {
   assertTrue(error instanceof ApiError, "l'erreur devrait être une ApiError");
   assertEqual(error.status, 409);
   assertEqual(error.message, "Ce jeu est déjà emprunté : il faut d'abord le rendre.");
+});
+
+// --- authentification
+
+test("translateError explains a too short password", () => {
+  assertEqual(
+    translateError(400, "password is less than minimum of 8 character(s)"),
+    "Le mot de passe doit contenir au moins 8 caractères.",
+  );
+});
+
+test("register and login post the credentials, me calls GET /auth/me", async () => {
+  const auth = { token: "abc", expiresAt: "2026-11-20T10:00:00Z", user: { id: "u1", email: "staff@example.com" } };
+  const { fetch, calls } = fakeApi({ "POST /auth/register": [201, auth], "POST /auth/login": auth, "GET /auth/me": auth.user });
+  const credentials = { email: "staff@example.com", password: "correct-horse" };
+  await withFakeFetch(fetch, async () => {
+    await api.register(credentials);
+    await api.login(credentials);
+    await api.me();
+  });
+  assertEqual(`${calls[0].method} ${calls[0].path}`, "POST /auth/register");
+  assertEqual(calls[0].body, credentials);
+  assertEqual(`${calls[1].method} ${calls[1].path}`, "POST /auth/login");
+  assertEqual(calls[1].body, credentials);
+  assertEqual(`${calls[2].method} ${calls[2].path}`, "GET /auth/me");
+});
+
+test("a saved token is sent in the Authorization header", async () => {
+  saveToken("abc");
+  const { fetch, calls } = fakeApi({ "GET /games": [] });
+  await withFakeFetch(fetch, () => api.listGames());
+  clearToken();
+  assertEqual(calls[0].headers.Authorization, "Bearer abc");
+});
+
+test("a token refused by the API (401) is forgotten", async () => {
+  saveToken("expired");
+  const { fetch } = fakeApi({ "GET /games": [401, { error: true, reason: "Authentication required" }] });
+  const error = await expectError(withFakeFetch(fetch, () => api.listGames()));
+  assertEqual(error.status, 401);
+  assertTrue(!hasToken(), "le jeton refusé doit être effacé");
 });
