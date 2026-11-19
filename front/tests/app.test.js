@@ -7,6 +7,7 @@ const camille = { id: "m1", name: "Camille", email: "camille@example.com" };
 
 const cardOf = (app, title) => app.$$("#games-list .card").find((card) => card.querySelector("h3").textContent === title);
 const rowOf = (app, name) => app.$$("#members-list .row").find((row) => row.querySelector("strong").textContent === name);
+const lastGamesSearch = (app) => app.calls.filter((call) => call.method === "GET" && call.path === "/games").at(-1).search;
 
 // --- Jeux
 
@@ -129,6 +130,38 @@ test("a refused deletion is shown in French and the confirmation stays open", as
   await waitFor(() => !app.$("#confirm-dialog .form-error").hidden, "le message d'erreur");
   assertIncludes(app.$("#confirm-dialog .form-error").textContent, "historique d'emprunts");
   assertTrue(app.$("#confirm-dialog").open, "la confirmation devrait rester ouverte");
+});
+
+test("the search combines the filters, ignores invalid numbers and can be reset", async () => {
+  const app = await mountApp({ "GET /games": [catan, dixit] });
+  await waitFor(() => app.$$("#games-list .card").length === 2);
+  const form = app.$("#games-filters");
+
+  app.type(form.elements.q, "cat");
+  app.type(form.elements.players, "4");
+  app.type(form.elements.maxDuration, "0");
+  await waitFor(() => lastGamesSearch(app) === "?q=cat&players=4", "titre et joueur·ses envoyés, durée nulle ignorée");
+
+  app.type(form.elements.players, "2.5");
+  await waitFor(() => lastGamesSearch(app) === "?q=cat", "un nombre non entier est ignoré");
+
+  app.type(form.elements.maxDuration, "60");
+  await waitFor(() => lastGamesSearch(app) === "?q=cat&maxDuration=60", "les filtres valides se combinent");
+
+  app.click("Réinitialiser");
+  await waitFor(() => lastGamesSearch(app) === "", "la recherche est remise à zéro");
+  assertEqual(form.elements.q.value, "");
+});
+
+test("a search without result shows its own message, not the empty library one", async () => {
+  const app = await mountApp({ "GET /games": [catan], "GET /games?q=zzz": [] });
+  await waitFor(() => app.$$("#games-list .card").length === 1);
+  app.type(app.$("#games-filters").elements.q, "zzz");
+
+  await waitFor(() => !app.$("#games-no-result").hidden, "le message sans résultat");
+  assertIncludes(app.$("#games-no-result").textContent, "Aucun jeu ne correspond");
+  assertTrue(app.$("#games-empty").hidden, "le message de ludothèque vide doit rester caché");
+  assertEqual(app.$$("#games-list .card").length, 0);
 });
 
 // --- Emprunts

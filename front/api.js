@@ -106,8 +106,19 @@ async function request(method, path, body) {
   return data;
 }
 
+function queryString(params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      search.set(key, value);
+    }
+  }
+  const text = search.toString();
+  return text ? `?${text}` : "";
+}
+
 export const api = {
-  listGames: () => request("GET", "/games"),
+  listGames: (filters = {}) => request("GET", `/games${queryString(filters)}`),
   createGame: (game) => request("POST", "/games", game),
   updateGame: (id, game) => request("PUT", `/games/${encodeURIComponent(id)}`, game),
   deleteGame: (id) => request("DELETE", `/games/${encodeURIComponent(id)}`),
