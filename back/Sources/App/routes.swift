@@ -2,7 +2,9 @@ import Vapor
 
 func routes(_ app: Application) throws {
     try app.register(collection: AuthController())
-    try app.register(collection: GameController())
-    try app.register(collection: MemberController())
-    try app.register(collection: LoanController())
+    
+    let protected = app.grouped(UserTokenMiddleware())
+    try protected.register(collection: GameController())
+    try protected.register(collection: MemberController())
+    try protected.register(collection: LoanController())
 }

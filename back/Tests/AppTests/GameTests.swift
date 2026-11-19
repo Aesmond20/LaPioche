@@ -8,7 +8,7 @@ final class GameTests: XCTestCase {
         with dto: CreateGameDTO,
         afterResponse: (XCTHTTPResponse) async throws -> Void
     ) async throws {
-        try await app.test(.PUT, "games/\(id)", beforeRequest: { req in
+        try await app.testAuthorized(.PUT, "games/\(id)", beforeRequest: { req in
             try req.content.encode(dto)
         }, afterResponse: afterResponse)
     }
@@ -18,12 +18,12 @@ final class GameTests: XCTestCase {
         query: String,
         afterResponse: (XCTHTTPResponse) async throws -> Void
     ) async throws {
-        try await app.test(.GET, "games?\(query)", afterResponse: afterResponse)
+        try await app.testAuthorized(.GET, "games?\(query)", afterResponse: afterResponse)
     }
     
     func testCreateGameReturnsCreated() async throws {
         try await withApp { app in
-            try await app.test(.POST, "games", beforeRequest: { req in
+            try await app.testAuthorized(.POST, "games", beforeRequest: { req in
                 try req.content.encode(CreateGameDTO(
                     title: "Catan", minPlayers: 3, maxPlayers: 4, durationMinutes: 90
                 ))
@@ -38,7 +38,7 @@ final class GameTests: XCTestCase {
 
     func testCreateGameWithEmptyTitleIsRejected() async throws {
         try await withApp { app in
-            try await app.test(.POST, "games", beforeRequest: { req in
+            try await app.testAuthorized(.POST, "games", beforeRequest: { req in
                 try req.content.encode(CreateGameDTO(
                     title: "", minPlayers: 3, maxPlayers: 4, durationMinutes: 90
                 ))
@@ -50,7 +50,7 @@ final class GameTests: XCTestCase {
 
     func testCreateGameWithInvertedPlayerBoundsIsRejected() async throws {
         try await withApp { app in
-            try await app.test(.POST, "games", beforeRequest: { req in
+            try await app.testAuthorized(.POST, "games", beforeRequest: { req in
                 try req.content.encode(CreateGameDTO(
                     title: "Catan", minPlayers: 5, maxPlayers: 2, durationMinutes: 90
                 ))
@@ -65,7 +65,7 @@ final class GameTests: XCTestCase {
             _ = try await createGame(app, title: "Catan")
             _ = try await createGame(app, title: "Dixit")
 
-            try await app.test(.GET, "games", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
                 XCTAssertEqual(try res.content.decode([GameDTO].self).count, 2)
             })
@@ -77,7 +77,7 @@ final class GameTests: XCTestCase {
             let game = try await createGame(app)
             let id = try XCTUnwrap(game.id)
 
-            try await app.test(.GET, "games/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
                 XCTAssertEqual(try res.content.decode(GameDTO.self).id, id)
             })
@@ -86,7 +86,7 @@ final class GameTests: XCTestCase {
 
     func testShowUnknownGameReturnsNotFound() async throws {
         try await withApp { app in
-            try await app.test(.GET, "games/\(UUID())", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/\(UUID())", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
         }
@@ -94,7 +94,7 @@ final class GameTests: XCTestCase {
 
     func testShowGameWithMalformedIDReturnsBadRequest() async throws {
         try await withApp { app in
-            try await app.test(.GET, "games/not-a-uuid", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/not-a-uuid", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .badRequest)
             })
         }
@@ -116,7 +116,7 @@ final class GameTests: XCTestCase {
 
     func testErrorResponsesCarryTheCorsHeaders() async throws {
         try await withApp { app in
-            try await app.test(.GET, "games/not-a-uuid", beforeRequest: { req in
+            try await app.testAuthorized(.GET, "games/not-a-uuid", beforeRequest: { req in
                 req.headers.replaceOrAdd(name: .origin, value: "http://localhost:8080")
             }, afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .badRequest)
@@ -142,7 +142,7 @@ final class GameTests: XCTestCase {
                 XCTAssertEqual(updated.durationMinutes, 30)
             }
 
-            try await app.test(.GET, "games/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(try res.content.decode(GameDTO.self).title, "Catan Junior")
             })
         }
@@ -155,7 +155,7 @@ final class GameTests: XCTestCase {
             let id = try XCTUnwrap(game.id)
             let memberID = try XCTUnwrap(member.id)
 
-            try await app.test(.POST, "loans", beforeRequest: { req in
+            try await app.testAuthorized(.POST, "loans", beforeRequest: { req in
                 try req.content.encode(CreateLoanDTO(gameID: id, memberID: memberID))
             }, afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .created)
@@ -221,11 +221,11 @@ final class GameTests: XCTestCase {
             let game = try await createGame(app)
             let id = try XCTUnwrap(game.id)
 
-            try await app.test(.DELETE, "games/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "games/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .noContent)
             })
 
-            try await app.test(.GET, "games/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
         }
@@ -242,7 +242,7 @@ final class GameTests: XCTestCase {
                 borrowedAt: Date(), dueAt: Date()
             )
 
-            try await app.test(.DELETE, "games/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "games/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .conflict)
             })
         }
@@ -259,11 +259,11 @@ final class GameTests: XCTestCase {
                 borrowedAt: Date(), dueAt: Date(), returnedAt: Date()
             )
 
-            try await app.test(.DELETE, "games/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "games/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .conflict)
             })
 
-            try await app.test(.GET, "games/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
             })
         }
@@ -271,7 +271,7 @@ final class GameTests: XCTestCase {
 
     func testDeleteUnknownGameReturnsNotFound() async throws {
         try await withApp { app in
-            try await app.test(.DELETE, "games/\(UUID())", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "games/\(UUID())", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
         }
@@ -279,7 +279,7 @@ final class GameTests: XCTestCase {
 
     func testDeleteGameWithMalformedIDReturnsBadRequest() async throws {
         try await withApp { app in
-            try await app.test(.DELETE, "games/not-a-uuid", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "games/not-a-uuid", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .badRequest)
             })
         }

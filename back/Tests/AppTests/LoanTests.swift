@@ -8,7 +8,7 @@ final class LoanTests: XCTestCase {
         memberID: UUID,
         afterResponse: (XCTHTTPResponse) async throws -> Void
     ) async throws {
-        try await app.test(.POST, "loans", beforeRequest: { req in
+        try await app.testAuthorized(.POST, "loans", beforeRequest: { req in
             try req.content.encode(CreateLoanDTO(gameID: gameID, memberID: memberID))
         }, afterResponse: afterResponse)
     }
@@ -30,7 +30,7 @@ final class LoanTests: XCTestCase {
         id: String,
         afterResponse: (XCTHTTPResponse) async throws -> Void
     ) async throws {
-        try await app.test(.POST, "loans/\(id)/return", afterResponse: afterResponse)
+        try await app.testAuthorized(.POST, "loans/\(id)/return", afterResponse: afterResponse)
     }
 
     func testBorrowGameReturnsCreated() async throws {
@@ -75,7 +75,7 @@ final class LoanTests: XCTestCase {
 
             try await borrow(app, gameID: gameID, memberID: try XCTUnwrap(member.id)) { _ in }
 
-            try await app.test(.GET, "games/\(gameID)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/\(gameID)", afterResponse: { res async throws in
                 XCTAssertFalse(try res.content.decode(GameDTO.self).isAvailable)
             })
         }
@@ -137,7 +137,7 @@ final class LoanTests: XCTestCase {
                 XCTAssertEqual(res.status, .ok)
             }
 
-            try await app.test(.GET, "games/\(loan.gameID)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "games/\(loan.gameID)", afterResponse: { res async throws in
                 XCTAssertTrue(try res.content.decode(GameDTO.self).isAvailable)
             })
 
@@ -209,7 +209,7 @@ final class LoanTests: XCTestCase {
                 borrowedAt: Date(), dueAt: Date(timeIntervalSinceNow: 14 * 86_400)
             )
 
-            try await app.test(.GET, "loans/overdue", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "loans/overdue", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
                 let loans = try res.content.decode([LoanDTO].self)
                 XCTAssertEqual(loans.count, 2)
@@ -224,7 +224,7 @@ final class LoanTests: XCTestCase {
         try await withApp { app in
             _ = try await createLoan(app)
 
-            try await app.test(.GET, "loans/overdue", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "loans/overdue", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
                 XCTAssertEqual(try res.content.decode([LoanDTO].self).count, 0)
             })

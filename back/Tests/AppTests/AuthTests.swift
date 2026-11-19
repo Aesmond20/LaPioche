@@ -6,6 +6,7 @@
 //
 
 @testable import App
+import Fluent
 import JWT
 import XCTVapor
 
@@ -58,7 +59,9 @@ final class AuthTests: XCTestCase {
         try await withApp { app in
             _ = try await registerUser(app, password: "correct-horse")
 
-            let storedUser = try await User.query(on: app.db).first()
+            let storedUser = try await User.query(on: app.db)
+                .filter(\.$email == "staff@example.com")
+                .first()
             let user = try XCTUnwrap(storedUser)
             XCTAssertNotEqual(user.passwordHash, "correct-horse")
             XCTAssertTrue(try Bcrypt.verify("correct-horse", created: user.passwordHash))

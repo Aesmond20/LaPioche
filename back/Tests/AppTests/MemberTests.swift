@@ -8,14 +8,14 @@ final class MemberTests: XCTestCase {
         with dto: CreateMemberDTO,
         afterResponse: (XCTHTTPResponse) async throws -> Void
     ) async throws {
-        try await app.test(.PUT, "members/\(id)", beforeRequest: { req in
+        try await app.testAuthorized(.PUT, "members/\(id)", beforeRequest: { req in
             try req.content.encode(dto)
         }, afterResponse: afterResponse)
     }
     
     func testCreateMemberReturnsCreated() async throws {
         try await withApp { app in
-            try await app.test(.POST, "members", beforeRequest: { req in
+            try await app.testAuthorized(.POST, "members", beforeRequest: { req in
                 try req.content.encode(CreateMemberDTO(name: "Camille", email: "camille@example.com"))
             }, afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .created)
@@ -26,7 +26,7 @@ final class MemberTests: XCTestCase {
 
     func testCreateMemberWithInvalidEmailIsRejected() async throws {
         try await withApp { app in
-            try await app.test(.POST, "members", beforeRequest: { req in
+            try await app.testAuthorized(.POST, "members", beforeRequest: { req in
                 try req.content.encode(CreateMemberDTO(name: "Camille", email: "not-an-email"))
             }, afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .badRequest)
@@ -38,7 +38,7 @@ final class MemberTests: XCTestCase {
         try await withApp { app in
             _ = try await createMember(app)
 
-            try await app.test(.POST, "members", beforeRequest: { req in
+            try await app.testAuthorized(.POST, "members", beforeRequest: { req in
                 try req.content.encode(CreateMemberDTO(name: "Autre", email: "camille@example.com"))
             }, afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .conflict)
@@ -48,7 +48,7 @@ final class MemberTests: XCTestCase {
 
     func testShowUnknownMemberReturnsNotFound() async throws {
         try await withApp { app in
-            try await app.test(.GET, "members/\(UUID())", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/\(UUID())", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
         }
@@ -69,7 +69,7 @@ final class MemberTests: XCTestCase {
                 XCTAssertEqual(updated.email, "camille.martin@example.com")
             }
 
-            try await app.test(.GET, "members/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(try res.content.decode(MemberDTO.self).name, "Camille Martin")
             })
         }
@@ -154,11 +154,11 @@ final class MemberTests: XCTestCase {
             let member = try await createMember(app)
             let id = try XCTUnwrap(member.id)
 
-            try await app.test(.DELETE, "members/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "members/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .noContent)
             })
 
-            try await app.test(.GET, "members/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
         }
@@ -175,7 +175,7 @@ final class MemberTests: XCTestCase {
                 borrowedAt: Date(), dueAt: Date()
             )
 
-            try await app.test(.DELETE, "members/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "members/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .conflict)
             })
         }
@@ -192,11 +192,11 @@ final class MemberTests: XCTestCase {
                 borrowedAt: Date(), dueAt: Date(), returnedAt: Date()
             )
 
-            try await app.test(.DELETE, "members/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "members/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .conflict)
             })
 
-            try await app.test(.GET, "members/\(id)", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/\(id)", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
             })
         }
@@ -204,7 +204,7 @@ final class MemberTests: XCTestCase {
 
     func testDeleteUnknownMemberReturnsNotFound() async throws {
         try await withApp { app in
-            try await app.test(.DELETE, "members/\(UUID())", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "members/\(UUID())", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
         }
@@ -212,7 +212,7 @@ final class MemberTests: XCTestCase {
 
     func testDeleteMemberWithMalformedIDReturnsBadRequest() async throws {
         try await withApp { app in
-            try await app.test(.DELETE, "members/not-a-uuid", afterResponse: { res async throws in
+            try await app.testAuthorized(.DELETE, "members/not-a-uuid", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .badRequest)
             })
         }
@@ -244,7 +244,7 @@ final class MemberTests: XCTestCase {
                 borrowedAt: Date(), dueAt: Date(timeIntervalSinceNow: 14 * 86_400)
             )
 
-            try await app.test(.GET, "members/\(memberID)/loans", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/\(memberID)/loans", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
                 let loans = try res.content.decode([LoanDTO].self)
                 XCTAssertEqual(loans.count, 2)
@@ -262,7 +262,7 @@ final class MemberTests: XCTestCase {
             let member = try await createMember(app)
             let memberID = try XCTUnwrap(member.id)
 
-            try await app.test(.GET, "members/\(memberID)/loans", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/\(memberID)/loans", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .ok)
                 XCTAssertEqual(try res.content.decode([LoanDTO].self).count, 0)
             })
@@ -271,7 +271,7 @@ final class MemberTests: XCTestCase {
 
     func testListLoansOfUnknownMemberReturnsNotFound() async throws {
         try await withApp { app in
-            try await app.test(.GET, "members/\(UUID())/loans", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/\(UUID())/loans", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
         }
@@ -279,7 +279,7 @@ final class MemberTests: XCTestCase {
 
     func testListLoansWithMalformedMemberIDReturnsBadRequest() async throws {
         try await withApp { app in
-            try await app.test(.GET, "members/not-a-uuid/loans", afterResponse: { res async throws in
+            try await app.testAuthorized(.GET, "members/not-a-uuid/loans", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .badRequest)
             })
         }
