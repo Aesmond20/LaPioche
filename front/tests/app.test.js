@@ -327,3 +327,52 @@ test("a refused member deletion is shown in French and the confirmation stays op
   assertIncludes(app.$("#confirm-dialog .form-error").textContent, "historique d'emprunts");
   assertTrue(app.$("#confirm-dialog").open, "la confirmation devrait rester ouverte");
 });
+
+test("a member's loans show the game title, the dates and each of the three states", async () => {
+  const day = 24 * 60 * 60 * 1000;
+  const azul = { id: "g3", title: "Azul", minPlayers: 2, maxPlayers: 4, durationMinutes: 45, isAvailable: false };
+  const app = await mountApp(
+    {
+      "GET /members": [camille],
+      "GET /games": [catan, dixit, azul],
+      "GET /members/m1/loans": [
+        { id: "l1", gameID: "g1", memberID: "m1", borrowedAt: "2026-09-01T10:00:00Z", dueAt: "2026-09-15T10:00:00Z", returnedAt: "2026-09-10T10:00:00Z" },
+        { id: "l2", gameID: "g2", memberID: "m1", borrowedAt: new Date(Date.now() - 2 * day).toISOString(), dueAt: new Date(Date.now() + 12 * day).toISOString() },
+        { id: "l3", gameID: "g3", memberID: "m1", borrowedAt: new Date(Date.now() - 20 * day).toISOString(), dueAt: new Date(Date.now() - 6 * day).toISOString() },
+      ],
+    },
+    { hash: "#members" },
+  );
+  await waitFor(() => app.$$("#members-list .row").length === 1);
+  app.click("Emprunts", rowOf(app, "Camille"));
+  await waitFor(() => app.$("#loans-dialog").open, "le panneau des emprunts");
+
+  assertIncludes(app.$("#loans-dialog-title").textContent, "Camille");
+  const rows = app.$$("#loans-list .row");
+  assertEqual(rows.length, 3);
+  assertTrue(app.$("#loans-empty").hidden, "le message de liste vide doit être caché");
+
+  assertIncludes(rows[0].textContent, "Catan");
+  assertIncludes(rows[0].textContent, "Emprunté le 1 septembre 2026");
+  assertIncludes(rows[0].textContent, "retour prévu le 15 septembre 2026");
+  assertIncludes(rows[0].textContent, "Rendu");
+  assertIncludes(rows[1].textContent, "Dixit");
+  assertIncludes(rows[1].textContent, "En cours");
+  assertIncludes(rows[2].textContent, "Azul");
+  assertIncludes(rows[2].textContent, "En retard");
+  assertTrue(!app.$("#loans-list").textContent.includes("g1"), "l'identifiant du jeu ne doit pas être affiché");
+});
+
+test("a member without loans sees a clear message", async () => {
+  const app = await mountApp(
+    { "GET /members": [camille], "GET /games": [catan], "GET /members/m1/loans": [] },
+    { hash: "#members" },
+  );
+  await waitFor(() => app.$$("#members-list .row").length === 1);
+  app.click("Emprunts", rowOf(app, "Camille"));
+  await waitFor(() => app.$("#loans-dialog").open, "le panneau des emprunts");
+
+  assertTrue(!app.$("#loans-empty").hidden, "le message de liste vide doit être visible");
+  assertIncludes(app.$("#loans-empty").textContent, "Aucun emprunt");
+  assertEqual(app.$$("#loans-list .row").length, 0);
+});

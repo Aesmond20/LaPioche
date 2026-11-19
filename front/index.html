@@ -93,6 +93,15 @@
     </form>
   </dialog>
 
+  <dialog id="loans-dialog" class="wide">
+    <h2 id="loans-dialog-title"></h2>
+    <p id="loans-empty" class="empty" hidden>Aucun emprunt pour le moment. Pour prêter un jeu, cliquez sur « Emprunter » sur sa carte, dans l'onglet Jeux.</p>
+    <ul id="loans-list" class="rows"></ul>
+    <div class="actions">
+      <button type="button" data-cancel>Fermer</button>
+    </div>
+  </dialog>
+
   <div id="toasts" role="status" aria-live="polite"></div>
 
   <script type="module" src="app.js"></script>
