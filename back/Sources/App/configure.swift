@@ -34,6 +34,9 @@ func configure(_ app: Application) async throws {
        guard let jwtSecret = Environment.get("JWT_SECRET") ?? (app.environment == .production ? nil : developmentJWTSecret) else {
            throw Abort(.internalServerError, reason: "JWT_SECRET must be set in production")
        }
+       guard jwtSecret.utf8.count >= 32 else {
+          throw Abort(.internalServerError, reason: "JWT_SECRET must be at least 32 characters long")
+    }
        await app.jwt.keys.add(hmac: HMACKey(from: jwtSecret), digestAlgorithm: .sha256)
     
     app.migrations.add(CreateGame())

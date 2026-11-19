@@ -167,7 +167,7 @@ final class AuthTests: XCTestCase {
         try await withApp { app in
             let auth = try await registerUser(app)
             let otherKeys = JWTKeyCollection()
-            await otherKeys.add(hmac: HMACKey(from: "another-secret"), digestAlgorithm: .sha256)
+            await otherKeys.add(hmac: HMACKey(from: "another-secret-that-is-long-enough-for-hmac"), digestAlgorithm: .sha256)
             let forgedToken = try await otherKeys.sign(UserPayload(
                 subject: SubjectClaim(value: try XCTUnwrap(auth.user.id).uuidString),
                 expiration: ExpirationClaim(value: Date().addingTimeInterval(3600))
